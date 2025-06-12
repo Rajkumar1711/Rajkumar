@@ -40,6 +40,7 @@ def overlay_qr_on_certificate(certificate_url, slug, username):
     draw.text(text_position, username, font=font, fill="black")
     
     certificate.save(f'{slug}_certificate_with_qr.png')
+    print("QR code was successfully overlaid on the certificate and saved as an image.")
 
 # Example usage
 certificate_url = 'https://devcourses-in.skillup.online/media/Program_03_Microsoft_Azure_Solutions_Architect_Program_v2.jpg'
