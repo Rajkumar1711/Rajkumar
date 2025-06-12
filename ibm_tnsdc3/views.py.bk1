@@ -1,0 +1,562 @@
+from django.shortcuts import render
+
+# Create your views here.
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import APIException
+from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
+from django.http import Http404
+from django.shortcuts import get_object_or_404
+from django.http import JsonResponse
+from ibm_tnsdc.models import *
+from .serializers import *
+from django.db.models import Q
+
+
+import logging
+log = logging.getLogger(__name__)
+
+
+
+class UserAPIView(APIView):
+    """
+    View to list users based on email id.
+    """
+
+    # permission_classes = [IsAuthenticated]
+
+    def get(self, request, format=None):
+        email = request.query_params.get('email')
+        if not email:
+            return Response({'error': 'email is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user = User.objects.get(email=email)
+            if user is not None:
+                data = {"user_info": []}
+                data["user_info"] = {
+                    "id":user.id,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "role":user.role,
+                    "course_id": user.course_id,
+                    "college": user.college.college_name
+                }
+                return JsonResponse(data, safe=False) 
+        except Team.DoesNotExist: 
+            return Response({"error": "Record not found"},status=status.HTTP_404_NOT_FOUND)
+        else:
+            return JsonResponse({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+
+
+
+
+class NewTeamMembersAPIView(APIView):
+    """
+    View to list, create and update TeamMembers based on email & team_name
+    """ 
+    permission_classes = [IsAuthenticated]
+
+
+    def get(self, request, format=None):
+        email = request.query_params.get('email')
+        team_name = request.query_params.get('team_name')
+        if not email or not team_name:
+            return Response({'error': 'email and team_name is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            mentor = Team.objects.get(mentor__email=email, team_name=team_name)
+            if mentor is not None:
+                serializer = TeamSerializer(mentor) # use many=False to serialize a single object
+                return Response(serializer.data)
+            else:
+                return Response({'error': 'Record not found'},status=status.HTTP_404_NOT_FOUND)
+        except Team.DoesNotExist: 
+            return Response({"error": "You are not a mentor of this team (or) record not found"},status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({'error': 'Record not found'},status=status.HTTP_404_NOT_FOUND)
+
+
+    def put(self, request, format=None):
+        email = request.query_params.get('email')
+        team_name = request.query_params.get('team_name')
+        if not email or not team_name:
+            return Response({'error': 'email and team_name is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            team = Team.objects.get(mentor__email=email, team_name=team_name)
+            if team is not None:
+                # Check if the request user email matches the team mentor email
+                serializer = TeamSerializer(team, data=request.data)
+                if serializer.is_valid():
+                    serializer.save(update_fields=["project", "mentor","members"])
+                    return Response(serializer.data)
+                else:
+                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                return Response({'error': 'Record not found'},status=status.HTTP_404_NOT_FOUND)
+        except Team.DoesNotExist: 
+            return Response({"error": "You are not a mentor of this team (or) record not found"},status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({'error': 'Record not found'},status=status.HTTP_404_NOT_FOUND)
+
+
+
+    def post(self, request, format=None):
+        team_name = request.data.get('team_name')
+        if Team.objects.filter(team_name=team_name).exists(): 
+            return Response({'error': 'The team name is already taken'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            serializer = TeamSerializer(data=request.data) 
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"success":"The team was created successfully","Record":serializer.data}, status=status.HTTP_201_CREATED)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+
+
+
+class MentorAPIView(APIView):
+    """
+    View to get all courses,projects,teams,team members data based on email
+    """ 
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        email = self.request.query_params.get('email')
+        user = None
+        if id is not None:
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                user = None
+        return user
+
+
+    def get(self, request, format=None):
+        user = self.get_object()
+        # logging.info(user)
+        if user is not None:
+            data = {"team_mentor_info": [],"courses": []} # create a dictionary with a courses key and an unassigned_members key
+            data["team_mentor_info"] = {
+                "id":user.id,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "role":user.role,
+                "course_id": user.course_id,
+                "college": user.college.college_name
+            }
+            # filter the courses by the user's course_id
+            courses = (user.course_id).split(",")
+            # logging.info(courses)
+            for course in courses:
+
+                courses = Project.objects.filter(college=user.college,course_id=course).values_list("course_id", flat=True).distinct()
+                for course in courses:
+                    course_name = Project.objects.filter(course_id=course).first().course_name
+                    # get the course name from the Course model 
+                    projects = Project.objects.filter(college=user.college, course_id=course)               
+                    course_data = {"course_id": course, "course_name": course_name, "projects": [],"unassigned_members": []} # create a dictionary for each course 
+                    for project in projects:
+                        teams = Team.objects.filter(project=project)
+                        project_data = {"id": project.id, "project_name": project.project_name, "project_description": project.project_description, "teams_count": 0, "teams": []} # create a dictionary for each project 
+                        # add a teams_count key to the project data and initialize it to zero
+                        for team in teams:
+                            members = team.members.all()
+                            seats_filled = len(team.members.all()) + 1
+                            seats_available = int(user.college.team_size) - seats_filled
+                            mentor = team.mentor.email
+                            # mentor = [team.mentor.email]
+                            # mentors = User.objects.filter(role="Team Mentor", course_id__contains=course,college=user.college)
+                            # mentor_emails = mentors.values_list('email', flat=True)
+                            # new_list = mentor + [x for x in mentor_emails if x not in mentor]
+                            # logging.info(new_list)
+                            team_data = { "team_id": team.id, "team_name": team.team_name, "team_mentor": mentor, "team_size": user.college.team_size, "seats_filled": seats_filled, "seats_available": seats_available, "team_members": [member.email for member in members] } # create a dictionary for each team 
+                            project_data["teams"].append(team_data)
+                            project_data["teams_count"] += 1 # increment the teams_count by one for each team
+                        course_data["projects"].append(project_data)
+                    data["courses"].append(course_data) 
+
+
+                all_members = User.objects.filter(Q(role="Team member") | Q(role="Team Member"),course_id=course,college=user.college)
+                # logging.info(all_members)
+                assigned_members = set()
+                for course in data["courses"]:
+                    for project in course["projects"]:
+                        for team in project["teams"]:
+                            for member in team["team_members"]:
+                                assigned_members.add(member)
+
+                for member in all_members:
+                    if member.email not in assigned_members and member.email:
+                        course_data["unassigned_members"].append(member.email)
+
+            return JsonResponse(data, safe=False) 
+        else:
+            return JsonResponse({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+
+
+
+
+
+class OverallDashboardAPIView(APIView):
+    " View to display some statistics based on the models."
+
+    def get(self, request, format=None):
+
+        try:
+            spocs_count = User.objects.filter(role="Spoc").count()
+            mentors_count = User.objects.filter(role="Team Mentor").count()
+            eval_count = User.objects.filter(role="Evaluator").count()
+            mentor_eval_count = User.objects.filter(Q(role="Team Mentor") & Q(is_evaluator=True)).count()
+            evaluators_count = eval_count + mentor_eval_count
+            college_count = College.objects.count()
+            team_member_count = User.objects.filter(role="Team Member").count()
+            # students_registered = TnsdcEnrollment.objects.filter(is_registered=True).values("email").distinct().count()
+            students_registered_data = TnsdcEnrollment.objects.filter(is_registered=True).values_list("email__email",flat=True).distinct()
+            # logging.info(students_registered_data)
+            students_registered = User.objects.filter(email__in=students_registered_data, role="Team Member").count()
+            # logging.info(students_registered)
+            # Get the distinct course ids from the user model
+            course_ids = User.objects.filter(role="Team Member").values_list("course_id", flat=True).distinct()
+
+            coursewise_students = []
+
+            for course_id in course_ids:
+                # Get the course name from the project model
+                course_name = Project.objects.filter(course_id=course_id).first().course_name
+                # Get the number of students enrolled in that course
+                student_count = User.objects.filter(role="Team Member", course_id=course_id).count()
+                coursewise_students.append({
+                    "course_id":course_id,
+                    "course_name": course_name,
+                    "student_count": student_count
+                })
+
+            response_data = {
+                "Total_students": team_member_count,
+                "registered_students": students_registered,
+                "Total_colleges": college_count,
+                "Total_Spocs": spocs_count,
+                "Total_Mentors": mentors_count,
+                "Total_Evaluators": evaluators_count,
+                "coursewise_students": coursewise_students
+            }
+        except ObjectDoesNotExist as e:
+            print(e)
+            return Response({"error": "Object does not exist"}, status=status.HTTP_404_NOT_FOUND)
+        except MultipleObjectsReturned as e:
+            print(e)
+            return Response({"error": "Multiple objects returned"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            print(e)
+            return Response({"error": "Something went wrong"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            print("API executed successfully")
+            return Response(response_data)
+        finally:
+            pass
+
+
+
+
+class PrincipalDashboardAPIView(APIView):
+    ''' A view that returns the statistics for a principal based on their email. '''
+    def get(self, request):
+        email = request.query_params.get("email", None)
+        if not email:
+            return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            principal = User.objects.get(email=email, role="Principal")
+        except User.DoesNotExist:
+            return Response({"error": "Principal not found"}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            college = principal.college
+            college_name = principal.college.college_name
+            # total_students_registered = User.objects.filter(college=college, role="Team Member", is_registered=True).count()
+            total_students_registered = User.objects.filter(college=college, role="Team Member", enrollment__is_registered=True).count()
+            total_students_enrolled = User.objects.filter(college=college, role="Team Member", enrollment__is_registered=True).count()
+            total_teams_created = Team.objects.filter(members__college=college).distinct().count()
+            total_projects_assigned = Project.objects.filter(college=college).count()
+            total_spoc_registered = User.objects.filter(college=college, role="Spoc", enrollment__is_registered=True).count()
+            total_spoc_enrolled = User.objects.filter(college=college, role="Spoc", enrollment__is_registered=True).count()
+            total_mentors_registered = User.objects.filter(college=college, role="Team Mentor", enrollment__is_registered=True).count()
+            total_mentors_enrolled = User.objects.filter(college=college, role="Team Mentor", enrollment__is_registered=True).count()
+            total_evaluators_registered = User.objects.filter(college=college, role="Evaluator", enrollment__is_registered=True).count()
+            total_evaluators_enrolled = User.objects.filter(college=college, role="Evaluator", enrollment__is_registered=True).count()
+
+            data = {
+                "college_name": college_name,
+                "students_registered": total_students_registered,
+                "students_enrolled": total_students_enrolled,
+                "teams_created": total_teams_created,
+                "projects_assigned": total_projects_assigned,
+                "spocs_registered": total_spoc_registered,
+                "spocs_enrolled": total_spoc_enrolled,
+                "mentors_registered": total_mentors_registered,
+                "mentors_enrolled": total_mentors_enrolled,
+                "evaluators_registered": total_evaluators_registered,
+                "evaluators_enrolled": total_evaluators_enrolled,
+            }
+
+        # return JsonResponse(data)
+        except ObjectDoesNotExist as e:
+            print(e)
+            return Response({"error": "Object does not exist"}, status=status.HTTP_404_NOT_FOUND)
+        except MultipleObjectsReturned as e:
+            print(e)
+            return Response({"error": "Multiple objects returned"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            print(e)
+            return Response({"error": "Something went wrong"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            print("API executed successfully")
+            return JsonResponse(data)
+        finally:
+            pass
+
+
+
+
+class MentorDashboardAPIView(APIView):
+    ''' A view that returns the statistics for a mentor based on their email. '''
+
+    def get(self, request, format=None):
+
+        email = request.query_params.get("email", None)
+        if not email:
+            return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            mentor = User.objects.get(email=email, role="Team Mentor")
+        except User.DoesNotExist:
+            return Response({"error": "Mentor not found"}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            college = mentor.college
+            college_name = mentor.college.college_name
+            # students_registered = User.objects.filter(college=college, role="Team Member").count()
+            # students_registered = TnsdcEnrollment.objects.filter(email__college=college, is_registered=True).count()
+            students_registered = TnsdcEnrollment.objects.filter(email__college=college, is_registered=True).values("email").distinct().count()
+            students_enrolled = TnsdcEnrollment.objects.filter(email__college=college, is_enrolled=True).count()
+            teams_created = Team.objects.filter(members__college=college).distinct().count()
+            projects_assigned = Project.objects.filter(college=college).count()
+            students_unassigned = User.objects.filter(college=college, role="Team Member", teams_members=None).count()
+            projects_evaluated = Team.objects.filter(evaluator=mentor).count()
+
+            teams_created_by_mentor = Team.objects.filter(mentor=mentor).count()
+            # teams_created_by_mentor_serializer = TeamSerializer(teams_created_by_mentor, many=True)
+            email = mentor.email
+            projects_allotted = Team.objects.filter(mentor__email=email).values("project").distinct().count()
+            # logging.info(projects_allotted)
+            data ={
+                "college_name": college_name,
+                "students_registered": students_registered,
+                "students_enrolled": students_enrolled,
+                "teams_created": teams_created,
+                "projects_assigned": projects_assigned,
+                "students_left_unassigned": students_unassigned,
+                "projects_evaluated_by_mentor": projects_evaluated,
+                "teams_created_by_mentor": teams_created_by_mentor,
+                "projects_allotted_to_mentor": projects_allotted,
+            }
+            # return JsonResponse(data)
+        except ObjectDoesNotExist as e:
+            print(e)
+            return Response({"error": "Object does not exist"}, status=status.HTTP_404_NOT_FOUND)
+        except MultipleObjectsReturned as e:
+            print(e)
+            return Response({"error": "Multiple objects returned"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            print(e)
+            return Response({"error": "Something went wrong"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            print("API executed successfully")
+            return JsonResponse(data)
+        finally:
+            pass
+
+
+
+# class AdminDashboardAPIView(APIView):
+#     '''A view that returns the user data based on the role query parameter. '''
+
+#     def get(self, request, format=None):
+#         role = request.query_params.get("role", None)
+#         if role is None:
+#             return Response({"error": "Role is required"}, status=400)
+#         if role not in ["Team Mentor", "Evaluator", "Spoc"]:
+#             return Response({"error": "Invalid role"}, status=404)
+#         try:
+#             users = User.objects.filter(role=role)
+#             if role == "Evaluator":
+#                 evaluators = User.objects.filter(Q(role="Team Mentor") & Q(is_evaluator=True))
+#                 users = users | evaluators # Union of two querysets
+#             logging.info(users)
+
+#             user_data = []
+#             for user in users:
+#                 college = user.college
+#                 course_id = user.course_id
+
+#                 data = {
+#                     "nm_id": user.nm_id,
+#                     "email": user.email,
+#                     "first_name": user.first_name,
+#                     "last_name": user.last_name,
+#                     "college_code": college.college_id,
+#                     "college_name": college.college_name,
+#                     "course_id": course_id,
+#                     # "course_name": Project.objects.get(course_id=course_id).course_name,
+#                     "course_name": "test",
+#                 }
+#                 user_data.append(data)
+
+#             count = len(user_data)
+
+#             # return Response({"count": count, "user_data": user_data})
+#         except ObjectDoesNotExist as e:
+#             print(e)
+#             return Response({"error": "Object does not exist"}, status=status.HTTP_404_NOT_FOUND)
+#         except MultipleObjectsReturned as e:
+#             print(e)
+#             return Response({"error": "Multiple objects returned"}, status=status.HTTP_400_BAD_REQUEST)
+#         except Exception as e:
+#             print(e)
+#             return Response({"error": "Something went wrong"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#         else:
+#             print("API executed successfully")
+#             return Response({"count": count, "user_data": user_data})
+#         finally:
+#             pass
+
+
+
+# class AdminDashboardAPIView(APIView):
+#     '''A view that returns the user data based on the role and college name query parameters. '''
+
+#     def get(self, request, format=None):
+#         role = request.query_params.get("role", None)
+#         college_name = request.query_params.get("college_name", None)
+#         if role is None:
+#             return Response({"error": "Role is required"}, status=400)
+#         if role not in ["Team Mentor", "Evaluator", "Spoc"]:
+#             return Response({"error": "Invalid role"}, status=404)
+#         if college_name is None:
+#             return Response({"error": "College name is required"}, status=400)
+#         try:
+#             users = User.objects.filter(role__iexact=role, college__college_name__iexact=college_name)
+#             if role == "Evaluator":
+#                 evaluators = User.objects.filter(Q(role="Team Mentor") & Q(is_evaluator=True))
+#                 users = users | evaluators # Union of two querysets
+#             logging.info(users)
+
+#             user_data = []
+#             for user in users:
+#                 college = user.college
+#                 course_id = user.course_id
+
+#                 data = {
+#                     "nm_id": user.nm_id,
+#                     "email": user.email,
+#                     "first_name": user.first_name,
+#                     "last_name": user.last_name,
+#                     "college_code": college.college_id,
+#                     "college_name": college.college_name,
+#                     "course_id": course_id,
+#                     # "course_name": Project.objects.get(course_id=course_id).course_name,
+#                     "course_name": "test",
+#                 }
+#                 user_data.append(data)
+
+#             count = len(user_data)
+
+#             # return Response({"count": count, "user_data": user_data})
+#         except ObjectDoesNotExist as e:
+#             print(e)
+#             return Response({"error": "Object does not exist"}, status=status.HTTP_404_NOT_FOUND)
+#         except MultipleObjectsReturned as e:
+#             print(e)
+#             return Response({"error": "Multiple objects returned"}, status=status.HTTP_400_BAD_REQUEST)
+#         except Exception as e:
+#             print(e)
+#             return Response({"error": "Something went wrong"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#         else:
+#             print("API executed successfully")
+#             return Response({"count": count, "user_data": user_data})
+#         finally:
+#             pass
+
+
+class AdminDashboardAPIView(APIView):
+    '''A view that returns the user data based on the role and college name query parameters. '''
+
+    # def get(self, request, format=None):
+    #     role = request.query_params.get("role", None)
+    #     college_name = request.query_params.get("college_name", None)
+    #     if role is None:
+    #         return Response({"error": "Role is required"}, status=400)
+    #     if role not in ["Team Mentor", "Evaluator", "Spoc"]:
+    #         return Response({"error": "Invalid role"}, status=404)
+    #     if college_name is None:
+    #         return Response({"error": "Invalid college name"}, status=404)
+    #     try:
+    #         if college_name is None:
+    #             users = User.objects.filter(role=role)
+    #         else:
+    #             users = User.objects.filter(role__iexact=role, college__college_name__iexact=college_name)
+    def get(self, request, format=None):
+        role = request.query_params.get("role", None)
+        college_name = request.query_params.get("college_name", None)
+        if role is None:
+            return Response({"error": "Role is required"}, status=400)
+        if role not in ["Team Mentor", "Evaluator", "Spoc"]:
+            return Response({"error": "Invalid role"}, status=404)
+        try:
+            if college_name is None:
+                users = User.objects.filter(role=role)
+            else:
+                users = User.objects.filter(role__iexact=role, college__college_name__iexact=college_name)
+            if role == "Evaluator":
+                evaluators = User.objects.filter(Q(role="Team Mentor") & Q(is_evaluator=True))
+                users = users | evaluators # Union of two querysets
+            logging.info(users)
+
+            user_data = []
+            for user in users:
+                college = user.college
+                course_id = user.course_id
+
+                data = {
+                    "nm_id": user.nm_id,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "college_code": college.college_id,
+                    "college_name": college.college_name,
+                    "course_id": course_id,
+                    # "course_name": Project.objects.get(course_id=course_id).course_name,
+                    "course_name": "test",
+                }
+                user_data.append(data)
+
+            count = len(user_data)
+
+            # return Response({"count": count, "user_data": user_data})
+        except ObjectDoesNotExist as e:
+            print(e)
+            return Response({"error": "Object does not exist"}, status=status.HTTP_404_NOT_FOUND)
+        except MultipleObjectsReturned as e:
+            print(e)
+            return Response({"error": "Multiple objects returned"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            print(e)
+            return Response({"error": "Something went wrong"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            print("API executed successfully")
+            return Response({"count": count, "user_data": user_data})
+        finally:
+            pass

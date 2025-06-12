@@ -1,0 +1,117 @@
+        <section class="main-ms-certificate"
+          style="background: url('/static/Openedx-theme/skillup_static/images/AI_certificate/cert_bg.png'); background-repeat: no-repeat;background-size: 100% 100%;">
+          <div class="ms-certificate">
+            <div class="toplogos">
+              <div class="toplogosleft">
+                <img src="${logo_src}" width="149" height="41" />
+              </div>
+              <div class="toplogosright">
+                <img src="images/Gcloud-logo.png" width="74" height="41" / class="mr-8">
+                <img src="images/NTPC-logo.svg" width="74" height="41" />
+              </div>
+            </div>
+            <div class="outer-box">
+              <div class="middle-box">
+                <div class="ms-certificateStart">
+                  <div class="CertificateHeading">
+                    <h1>Certificate<span>of Completion</span></h1>
+
+                  </div>
+                  <div class="clearfix"></div>
+                  <div class="studentName">
+                    <h3>${accomplishment_copy_name | h}</h3>
+                    <p>has successfully completed the course</p>
+                    <h4>${accomplishment_copy_course_name}</h4>
+                  </div>
+
+                  <div class="MS-signature-dateM">
+                    <ul class="MS-signature-date">
+                      <li>
+                        <div class="Certificate-dateT">
+                          <p>${certificate_date_issued}</p>
+                          <span class="date">${certificate_id_number}</span>
+                        </div>
+                      </li>
+                    % if certificate_data:
+                         % for signatory in certificate_data.get('signatories', []):
+                            % if signatory['name'] != "":
+                      <li>
+                        <div class="signature-ms">
+                          <div class="verifled-logo">
+                            <img src="images/verifled-logo.svg" width="86" height="64" alt="" />
+                          </div>
+                          <img src="${static.url(signatory['signature_image_path'])}" width="62" height="28" alt="${platform_name}" />
+                          <h6>${signatory['name']}</h6>
+                          <p>${signatory['title']} ${signatory['organization']}</p>
+                        </div>
+                      </li>
+                            % endif
+						% endfor
+                    % endif	
+                    </ul>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+			<section class="main-ms-certificate" style="background : url('/static/Openedx-theme/skillup_static/images/AI_certificate/cert_bg.png'); background-repeat: no-repeat;background-size: 100% 100%;">
+		   <div class="ms-certificate">
+			   <div class="outer-box">
+				<div class="middle-box">
+				  <div class="ms-certificateStart">
+             <div class="headlogo">
+              <ul>
+                <li><img src="${logo_src}" width="120" alt=""/></li>
+                <li><img class="organization-logo" src="${static.url('skillup_static/images/ms-certificate/Group 1625@2x.png')}" width="120" alt="${platform_name}"/></li>
+              </ul>
+            </div>
+				   <div class="CertificateHeading">
+					  <h1>Certificate</h1>
+					  <h2>of Completion</h2>
+				  </div>
+					  <div class="clearfix"></div>
+					  <div class="studentName">
+					  <h3>${accomplishment_copy_name | h}</h3>
+					   <p>has successfully completed the course</p>
+					<h4>${accomplishment_copy_course_name}</h4>	  
+					  </div>
+					<div class="MS-signature-dateM">
+					<ul class="MS-signature-date">	
+						 % if certificate_data:
+                                % for signatory in certificate_data.get('signatories', []):
+                                    % if signatory['name'] != "":
+					         	    <li>	
+									 <div class="signature-ms">
+										 <img class="signatory-signature" src="${static.url(signatory['signature_image_path'])}" width="100" alt="${signatory['name']}">
+										<span class="ms-bdr-s"></span>
+										 <h6>${signatory['name']}</h6>								
+										<p>${signatory['title']} ${signatory['organization']}</p>
+									</div>
+					        	    </li>
+                                    % endif
+								% endfor
+                        % endif				
+					    <li>	
+						<div class="Su_Ms-logo">
+							<!-- <img src="${logo_src}" width="140" alt=""/><br>
+						  <img class="organization-logo" src="${static.url('skillup_static/images/ms-certificate/Group 1625@2x.png')}" width="140" alt="${platform_name}"/>  -->
+						</div>
+						</li>
+						<li>
+					 <div class="Certificate-dateT">
+						<p>${certificate_date_issued}</p>
+						<span class="ms-bdr-s"></span>
+						 <span class="date">Date</span>
+						</div></li>	
+						</ul>
+					 </div>
+					</div>
+					</div>
+				   </div>		    
+			</div>
+		   </section>

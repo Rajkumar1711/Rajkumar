@@ -1,0 +1,655 @@
+from django.shortcuts import render
+
+# Create your views here.
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.shortcuts import get_object_or_404
+from django.http import JsonResponse
+from .models import *
+from .serializers import *
+from django.db.models import Q
+
+import logging
+log = logging.getLogger(__name__)
+        
+class NewTeamMembersAPIView(APIView):
+    """
+    View to list, create and update TeamMembers based on id
+    """ 
+    def get_object(self):
+        email = self.request.query_params.get('email')
+        team_name = self.request.query_params.get('team_name') # get the team_name from the query params
+        mentor = None
+        if email is not None and team_name is not None:
+            mentor = Team.objects.get(mentor__email=email, team_name=team_name) # use get instead of filter and add team_name as a filter
+        return mentor
+
+    def get(self, request, format=None):
+        mentor = self.get_object()
+        if mentor is not None:
+            serializer = TeamSerializer(mentor) # use many=False to serialize a single object
+            return Response(serializer.data)
+        else:
+            return Response({'error': 'Record not found'},status=status.HTTP_404_NOT_FOUND)
+
+
+    def put(self, request, format=None):
+        mentor = self.get_object()
+        if mentor is not None:
+            serializer = TeamSerializer(mentor, data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response({'error': 'Record not found'},status=status.HTTP_404_NOT_FOUND)
+
+
+    def post(self, request, format=None):
+        serializer = TeamSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+
+# class NewTeamMembersAPIView(APIView):
+#     """
+#     View to list, create and update TeamMembers based on id
+#     """    
+#     def get_object(self):
+#         email = self.request.query_params.get('email')
+#         mentor = None
+#         if email is not None:
+#             try:
+#                 mentor = Team.objects.get(mentor__email=email)
+#             except Team.DoesNotExist:
+#                 mentor = None
+#         return mentor
+
+#     def get(self, request, format=None):
+#         mentor = self.get_object()
+#         if mentor is not None:
+#             serializer = TeamSerializer(mentor)
+#             return Response(serializer.data)
+#         else:
+#             return Response({'error': 'Record not found'},status=status.HTTP_404_NOT_FOUND)
+
+#     def put(self, request, format=None):
+#         mentor = self.get_object()
+#         if mentor is not None:
+#             serializer = TeamSerializer(mentor, data=request.data)
+#             if serializer.is_valid():
+#                 serializer.save()
+#                 return Response(serializer.data)
+#             else:
+#                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+#         else:
+#             return Response({'error': 'Record not found'},status=status.HTTP_404_NOT_FOUND)
+
+#     def post(self, request, format=None):
+#         serializer = TeamSerializer(data=request.data)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response(serializer.data, status=status.HTTP_201_CREATED)
+#         else:
+#             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# class UserAPIView(APIView):
+#     def get(self, request):
+#         # get the email from query params
+#         email = request.query_params.get("email")
+#         if email:
+#             # get the user object by email
+#             user = User.objects.get(email=email)
+#             if user:
+#                 # get the college name of the user
+#                 college_name = user.college.college_name
+#                 # get the list of courses of the user
+#                 courses = Project.objects.filter(college=user.college).values_list("course_name", flat=True).distinct()
+#                 # get the list of projects of the user
+#                 projects = Project.objects.filter(college=user.college).values_list("project_name", flat=True)
+#                 # get the list of teams the user has enrolled
+#                 teams = Team.objects.filter(members=user).values_list("team_name", flat=True)
+#                 # create a response dictionary with the data
+#                 data = {
+#                     "college_name": college_name,
+#                     "courses": list(courses),
+#                     "projects": list(projects),
+#                     "teams": list(teams)
+#                 }
+#                 # serialize the data using ProjectSerializer
+#                 serializer = ProjectSerializer(data=data)
+#                 # return a success response with the serialized data
+#                 return Response(serializer.data, status=status.HTTP_200_OK)
+#             else:
+#                 # return a not found response if no user with that email exists
+#                 return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+#         else:
+#             # return a bad request response if no email is provided
+#             return Response({"message": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+# from django.http import JsonResponse
+# from .models import Course, Project, Team
+
+# def get_courses(request):
+#     # Get all the courses from the database
+#     courses = Course.objects.all()
+#     # Create an empty list to store the course data
+#     course_data = []
+#     # Loop through each course
+#     for course in courses:
+#         # Get the projects related to the course
+#         projects = Project.objects.filter(course_id=course.course_id)
+#         # Create an empty list to store the project data
+#         project_data = []
+#         # Loop through each project
+#         for project in projects:
+#             # Get the teams related to the project
+#             teams = Team.objects.filter(project=project)
+#             # Create an empty list to store the team data
+#             team_data = []
+#             # Loop through each team
+#             for team in teams:
+#                 # Get the members of the team
+#                 members = team.members.all()
+#                 # Create a list of member emails
+#                 member_emails = [member.email for member in members]
+#                 # Create a dictionary with the team details
+#                 team_dict = {
+#                     "team_id": team.id,
+#                     "team_name": team.team_name,
+#                     "team_mentor": team.mentor.email,
+#                     "team_size": team.team_size,
+#                     "seats_filled": len(member_emails),
+#                     "seats_available": team.team_size - len(member_emails),
+#                     "members": member_emails
+#                 }
+#                 # Append the team dictionary to the team data list
+#                 team_data.append(team_dict)
+#             # Create a dictionary with the project details
+#             project_dict = {
+#                 "id": project.id,
+#                 "project_name": project.project_name,
+#                 "project_description": project.project_description,
+#                 "teams": team_data
+#             }
+#             # Append the project dictionary to the project data list
+#             project_data.append(project_dict)
+#         # Create a dictionary with the course details
+#         course_dict = {
+#             "course_id": course.course_id,
+#             "course_name": course.course_name,
+#             "projects": project_data
+#         }
+#         # Append the course dictionary to the course data list
+#         course_data.append(course_dict)
+#     # Return a JSON response with the course data list
+#     return JsonResponse({"courses": course_data})
+
+
+
+# class UserAPIView(APIView):
+#     """
+#     View to list, create and update projects based on course_id&college_id.
+#     """
+#     def get_object(self):
+#         email = self.request.query_params.get('email')
+#         user = None
+#         if id is not None:
+#             try:
+#                 user = User.objects.get(email=email)
+#                 logging.info(user)
+#             except User.DoesNotExist:
+#                 user = None
+#         return user
+    
+    # def get_object(self):
+    #     email = self.request.query_params.get('email')
+    #     college = self.request.query_params.get('college')
+    #     user = None
+    #     if email is not None and college is not None:
+    #         try:
+    #             user = User.objects.filter(email=email, college=college)
+    #         except User.DoesNotExist:
+    #             user = None
+    #     return user
+
+  
+    # def get(self, request, format=None):
+    #     user = self.get_object()
+    #     logging.info(user)
+    #     if user is not None:
+    #         data = []
+    #         # get the courses of the user
+    #         courses = Project.objects.filter(college=user.college).values_list("course_id", flat=True).distinct()
+    #         logging.info(courses)
+    #         for course in courses:
+    #             # get the projects of the user in each course
+    #             projects = Project.objects.filter(college=user.college, course_id=course)
+    #             logging.info(projects)
+    #             for project in projects:
+    #                 # get the team of the user in each project
+    #                 teams = Team.objects.filter(project=project,mentor__email=user.email)
+    #                 logging.info(teams)
+    #                 for team in teams:
+    #                     # get the members of the team
+    #                     members = team.members.all()
+    #                     # create a dictionary with the relevant data
+    #                     data.append({
+    #                         "course_id": course,
+    #                         "project_name": project.project_name,
+    #                         "team_name": team.team_name,
+    #                         "mentor": team.mentor.email,
+    #                         "members": [member.email for member in members]
+    #                     })
+    #         # serialize the data using a custom serializer
+    #         serializer = UserCourseProjectTeamSerializer(data, many=True)
+    #         return Response(serializer.data, status=status.HTTP_200_OK)
+    #     else:
+    #         return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+# class UserAPIView(APIView):
+#     def get_object(self):
+#         email = self.request.query_params.get('email')
+#         user = None
+#         if id is not None:
+#             try:
+#                 user = User.objects.get(email=email)
+#                 logging.info(user)
+#             except User.DoesNotExist:
+#                 user = None
+#         return user
+        
+#     def get(self, request, format=None):
+#         user = self.get_object()
+#         logging.info(user)
+#         if user is not None:
+#             data = []
+#             courses = Project.objects.filter(college=user.college).values_list("course_id", flat=True).distinct()
+#             logging.info(courses)
+#             for course in courses:
+#                 course_name = Project.objects.get(course_id=course).course_name
+#                 # get the course name from the Course model 
+#                 projects = Project.objects.filter(college=user.college, course_id=course)
+#                 logging.info(projects)
+#                 course_data = {"course_id": course, "course_name": course_name, "projects": []} # create a dictionary for each course 
+#                 for project in projects:
+#                     teams = Team.objects.filter(project=project,mentor__email=user.email)
+#                     logging.info(teams)
+#                     project_data = {"id": project.id, "project_name": project.project_name, "project_description": project.project_description, "teams": []} # create a dictionary for each project 
+#                     for team in teams:
+#                         members = team.members.all()
+#                         team_data = { "team_id": team.id, "team_name": team.team_name, "team_mentor": team.mentor.email, "team_size": team.team_size, "seats_filled": 2, "seats_available": 3, "members": [member.email for member in members] } # create a dictionary for each team 
+#                         project_data["teams"].append(team_data) # append the team data to the project data 
+#                         course_data["projects"].append(project_data) # append the project data to the course data 
+#                         data.append(course_data) # append the course data to the final data 
+#                         logging.info(course_data)
+#             #     serializer = UserCourseProjectTeamSerializer(data, many=True)
+#             #     return Response(serializer.data, status=status.HTTP_200_OK)
+#             # else:
+#             #     return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+#                 return JsonResponse(data, safe=False) # return a JSON response with the data 
+#             else:
+#                 return JsonResponse({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+
+
+# class UserAPIView(APIView):
+#     def get_object(self):
+#         email = self.request.query_params.get('email')
+#         user = None
+#         if id is not None:
+#             try:
+#                 user = User.objects.get(email=email)
+#                 logging.info(user)
+#             except User.DoesNotExist:
+#                 user = None
+#         return user
+        
+#     def get(self, request, format=None):
+#         user = self.get_object()
+#         logging.info(user)
+#         if user is not None:
+#             data = []
+#             courses = Project.objects.filter(college=user.college).values_list("course_id", flat=True).distinct()
+#             logging.info(courses)
+#             for course in courses:
+#                 course_name = Project.objects.get(course_id=course).course_name
+#                 # get the course name from the Course model 
+#                 projects = Project.objects.filter(college=user.college, course_id=course)
+#                 logging.info(projects)
+#                 course_data = {"course_id": course, "course_name": course_name, "projects": []} # create a dictionary for each course 
+#                 for project in projects:
+#                     teams = Team.objects.filter(project=project,mentor__email=user.email)
+#                     logging.info(teams)
+#                     project_data = {"id": project.id, "project_name": project.project_name, "project_description": project.project_description, "teams": []} # create a dictionary for each project 
+#                     for team in teams:
+#                         members = team.members.all()
+#                         team_data = { "team_id": team.id, "team_name": team.team_name, "team_mentor": team.mentor.email, "team_size": team.team_size, "seats_filled": 2, "seats_available": 3, "members": [member.email for member in members] } # create a dictionary for each team 
+#                         project_data["teams"].append(team_data) # append the team data to the project data 
+#                     course_data["projects"].append(project_data) # append the project data to the course data 
+#                 data.append(course_data) # append the course data to the final data 
+#                 logging.info(course_data)
+#             return JsonResponse(data, safe=False) # return a JSON response with the data 
+#         else:
+#             return JsonResponse({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+
+# class MentorAPIView(APIView):
+#     def get_object(self):
+#         email = self.request.query_params.get('email')
+#         user = None
+#         if id is not None:
+#             try:
+#                 user = User.objects.get(email=email)
+#                 logging.info(user)
+#             except User.DoesNotExist:
+#                 user = None
+#         return user
+        
+#     def get(self, request, format=None):
+#         user = self.get_object()
+#         logging.info(user)
+#         if user is not None:
+#             data = {"courses": []} # create a dictionary with a courses key 
+#             courses = Project.objects.filter(college=user.college).values_list("course_id", flat=True).distinct()
+#             logging.info(courses)
+#             for course in courses:
+#                 course_name = Project.objects.get(course_id=course).course_name
+#                 # get the course name from the Course model 
+#                 projects = Project.objects.filter(college=user.college, course_id=course)
+#                 logging.info(projects)
+#                 course_data = {"course_id": course, "course_name": course_name, "projects": []} # create a dictionary for each course 
+#                 for project in projects:
+#                     teams = Team.objects.filter(project=project,mentor__email=user.email)
+#                     logging.info(teams)
+#                     project_data = {"id": project.id, "project_name": project.project_name, "project_description": project.project_description, "teams": []} # create a dictionary for each project 
+#                     for team in teams:
+#                         members = team.members.all()
+#                         team_data = { "team_id": team.id, "team_name": team.team_name, "team_mentor": team.mentor.email, "team_size": 9, "seats_filled": 2, "seats_available": 3, "members": [member.email for member in members] } # create a dictionary for each team 
+#                         project_data["teams"].append(team_data) # append the team data to the project data 
+#                     course_data["projects"].append(project_data) # append the project data to the course data 
+#                 data["courses"].append(course_data) # append the course data to the courses list 
+#                 logging.info(course_data)
+#             return JsonResponse(data, safe=False) # return a JSON response with the data 
+#         else:
+#             return JsonResponse({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+# class UserAPIView(APIView):
+#     def get_object(self):
+#         email = self.request.query_params.get('email')
+#         user = None
+#         if id is not None:
+#             try:
+#                 user = User.objects.get(email=email)
+#                 logging.info(user)
+#             except User.DoesNotExist:
+#                 user = None
+#         return user
+        
+#     def get(self, request, format=None):
+#         user = self.get_object()
+#         logging.info(user)
+#         if user is not None:
+#             data = {"courses": [], "unassigned_members": []} # create a dictionary with a courses key and an unassigned_members key
+#             courses = Project.objects.filter(college=user.college).values_list("course_id", flat=True).distinct()
+#             logging.info(courses)
+#             for course in courses:
+#                 course_name = Project.objects.get(course_id=course).course_name
+#                 # get the course name from the Course model 
+#                 projects = Project.objects.filter(college=user.college, course_id=course)
+#                 logging.info(projects)
+#                 course_data = {"course_id": course, "course_name": course_name, "projects": []} # create a dictionary for each course 
+#                 for project in projects:
+#                     teams = Team.objects.filter(project=project,mentor__email=user.email)
+#                     logging.info(teams)
+#                     project_data = {"id": project.id, "project_name": project.project_name, "project_description": project.project_description, "teams": []} # create a dictionary for each project 
+#                     for team in teams:
+#                         members = team.members.all()
+#                         team_data = { "team_id": team.id, "team_name": team.team_name, "team_mentor": team.mentor.email, "team_size": team.team_size, "seats_filled": 2, "seats_available": 3, "members": [member.email for member in members] } # create a dictionary for each team 
+#                         project_data["teams"].append(team_data) # append the team data to the project data 
+#                     course_data["projects"].append(project_data) # append the project data to the course data 
+#                 data["courses"].append(course_data) # append the course data to the courses list 
+#                 logging.info(course_data)
+
+#             # create a list of all the members in the user's college
+#             all_members = User.objects.filter(college=user.college)
+
+#             # create a set of all the assigned members
+#             assigned_members = set()
+
+#             # loop through the courses and projects and teams and add the members to the set
+#             for course in data["courses"]:
+#                 for project in course["projects"]:
+#                     for team in project["teams"]:
+#                         for member in team["members"]:
+#                             assigned_members.add(member)
+
+#             # loop through all the members and check if they are not in the set
+#             for member in all_members:
+#                 if member.email not in assigned_members:
+#                     # add them to the unassigned_members list
+#                     data["unassigned_members"].append(member.email)
+
+#             return JsonResponse(data, safe=False) # return a JSON response with the data 
+#         else:
+#             return JsonResponse({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+# class UserAPIView(APIView):
+#     def get_object(self):
+#         email = self.request.query_params.get('email')
+#         user = None
+#         if id is not None:
+#             try:
+#                 user = User.objects.get(email=email)
+#                 logging.info(user)
+#             except User.DoesNotExist:
+#                 user = None
+#         return user
+        
+#     def get(self, request, format=None):
+#         user = self.get_object()
+#         logging.info(user)
+#         if user is not None:
+#             data = {"courses": [], "unassigned_members": []} # create a dictionary with a courses key and an unassigned_members key
+#             courses = Project.objects.filter(college=user.college).values_list("course_id", flat=True).distinct()
+#             logging.info(courses)
+#             for course in courses:
+#                 course_name = Project.objects.get(course_id=course).course_name
+#                 # get the course name from the Course model 
+#                 projects = Project.objects.filter(college=user.college, course_id=course)
+#                 logging.info(projects)
+#                 course_data = {"course_id": course, "course_name": course_name, "projects": []} # create a dictionary for each course 
+#                 for project in projects:
+#                     teams = Team.objects.filter(project=project,mentor__email=user.email)
+#                     logging.info(teams)
+#                     project_data = {"id": project.id, "project_name": project.project_name, "project_description": project.project_description, "teams": []} # create a dictionary for each project 
+#                     for team in teams:
+#                         members = team.members.all()
+#                         team_data = { "team_id": team.id, "team_name": team.team_name, "team_mentor": team.mentor.email, "team_size": team.team_size, "seats_filled": 2, "seats_available": 3, "members": [member.email for member in members] } # create a dictionary for each team 
+#                         project_data["teams"].append(team_data) # append the team data to the project data 
+#                         project_data["teams_count"] = len(project_data["teams"])
+#                     course_data["projects"].append(project_data) # append the project data to the course data 
+#                 data["courses"].append(course_data) # append the course data to the courses list 
+#                 logging.info(course_data)
+
+#             # create a list of all the members in the user's college
+#             all_members = User.objects.filter(college=user.college)
+
+#             # create a set of all the assigned members
+#             assigned_members = set()
+
+#             # loop through the courses and projects and teams and add the members to the set
+#             for course in data["courses"]:
+#                 for project in course["projects"]:
+#                     for team in project["teams"]:
+#                         for member in team["members"]:
+#                             assigned_members.add(member)
+
+#             # create a set of all the mentors
+#             mentors = set()
+
+#             # loop through the courses and projects and teams and add the mentors to the set
+#             for course in data["courses"]:
+#                 for project in course["projects"]:
+#                     for team in project["teams"]:
+#                         mentors.add(team["team_mentor"])
+
+#             # loop through all the members and check if they are not in the assigned set or the mentor set
+#             for member in all_members:
+#                 if member.email not in assigned_members and member.email not in mentors:
+#                     # add them to the unassigned_members list
+#                     data["unassigned_members"].append(member.email)
+
+#             return JsonResponse(data, safe=False) # return a JSON response with the data 
+#         else:
+#             return JsonResponse({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+# class UserAPIView(APIView):
+#     def get_object(self):
+#         email = self.request.query_params.get('email')
+#         user = None
+#         if id is not None:
+#             try:
+#                 user = User.objects.get(email=email)
+#                 logging.info(user)
+#             except User.DoesNotExist:
+#                 user = None
+#         return user
+        
+#     def get(self, request, format=None):
+#         user = self.get_object()
+#         logging.info(user)
+#         if user is not None:
+#             data = {"courses": [], "unassigned_members": []} # create a dictionary with a courses key and an unassigned_members key
+#             courses = Project.objects.filter(college=user.college).values_list("course_id", flat=True).distinct()
+#             logging.info(courses)
+#             for course in courses:
+#                 # course_name = Project.objects.get(course_id=course).course_name
+#                 # get the course name from the Course model 
+#                 projects = Project.objects.filter(college=user.college, course_id=course)               
+#                 course_data = {"course_id": course, "course_name": "ABC", "projects": []} # create a dictionary for each course 
+#                 for project in projects:
+#                     teams = Team.objects.filter(project=project,mentor__email=user.email)
+#                     project_data = {"id": project.id, "project_name": project.project_name, "project_description": project.project_description, "teams_count": 0, "teams": []} # create a dictionary for each project 
+#                     # add a teams_count key to the project data and initialize it to zero
+#                     for team in teams:
+#                         members = team.members.all()
+#                         seats_filled = len(team.members.all()) + 1
+#                         seats_available = int(user.college.team_size) - seats_filled
+#                         team_data = { "team_id": team.id, "team_name": team.team_name, "team_mentor": team.mentor.email, "team_size": user.college.team_size, "seats_filled": seats_filled, "seats_available": seats_available, "members": [member.email for member in members] } # create a dictionary for each team 
+#                         project_data["teams"].append(team_data) # append the team data to the project data 
+#                         project_data["teams_count"] += 1 # increment the teams_count by one for each team
+#                     course_data["projects"].append(project_data) # append the project data to the course data 
+#                 data["courses"].append(course_data) 
+
+#             # all_members = User.objects.filter(college=user.college)
+#             all_members = User.objects.filter(Q(role="Team member") | Q(role="Team Member"),course_id=user.course_id,college=user.college)
+
+#             # create a set of all the assigned members
+#             assigned_members = set()
+#             for course in data["courses"]:
+#                 for project in course["projects"]:
+#                     for team in project["teams"]:
+#                         for member in team["members"]:
+#                             assigned_members.add(member)
+
+#             for member in all_members:
+#                 if member.email not in assigned_members and member.email:
+#                     # add them to the unassigned_members list
+#                     data["unassigned_members"].append(member.email)
+
+#             return JsonResponse(data, safe=False) 
+#         else:
+#             return JsonResponse({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+
+
+
+class MentorAPIView(APIView):
+    def get_object(self):
+        email = self.request.query_params.get('email')
+        user = None
+        if id is not None:
+            try:
+                user = User.objects.get(email=email)
+                logging.info(user)
+            except User.DoesNotExist:
+                user = None
+        return user
+
+
+    def get(self, request, format=None):
+        user = self.get_object()
+        logging.info(user)
+        if user is not None:
+            data = {"team_mentor_info": [],"courses": [], "unassigned_members": []} # create a dictionary with a courses key and an unassigned_members key
+            data["team_mentor_info"] = {
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "course_id": user.course_id,
+                "college": user.college.college_name
+            }
+            # filter the courses by the user's course_id
+            logging.info(user.course_id)
+            courses = (user.course_id).split(",")
+            logging.info(courses)
+            for course in courses:
+                courses = Project.objects.filter(college=user.college,course_id=course).values_list("course_id", flat=True).distinct()
+                logging.info(courses)
+                for course in courses:
+                    course_name = Project.objects.filter(course_id=course).first().course_name
+                    # get the course name from the Course model 
+                    projects = Project.objects.filter(college=user.college, course_id=course)               
+                    course_data = {"course_id": course, "course_name": course_name, "projects": []} # create a dictionary for each course 
+                    for project in projects:
+                        teams = Team.objects.filter(project=project,mentor__email=user.email)
+                        project_data = {"id": project.id, "project_name": project.project_name, "project_description": project.project_description, "teams_count": 0, "teams": []} # create a dictionary for each project 
+                        # add a teams_count key to the project data and initialize it to zero
+                        for team in teams:
+                            members = team.members.all()
+                            seats_filled = len(team.members.all()) + 1
+                            seats_available = int(user.college.team_size) - seats_filled
+                            team_data = { "team_id": team.id, "team_name": team.team_name, "team_mentor": team.mentor.email, "team_size": user.college.team_size, "seats_filled": seats_filled, "seats_available": seats_available, "members": [member.email for member in members] } # create a dictionary for each team 
+                            project_data["teams"].append(team_data) # append the team data to the project data 
+                            project_data["teams_count"] += 1 # increment the teams_count by one for each team
+                        course_data["projects"].append(project_data) # append the project data to the course data 
+                    data["courses"].append(course_data) 
+
+            # all_members = User.objects.filter(college=user.college)
+            all_members = User.objects.filter(Q(role="Team member") | Q(role="Team Member"),course_id=user.course_id,college=user.college)
+
+            # create a set of all the assigned members
+            assigned_members = set()
+            for course in data["courses"]:
+                for project in course["projects"]:
+                    for team in project["teams"]:
+                        for member in team["members"]:
+                            assigned_members.add(member)
+
+            for member in all_members:
+                if member.email not in assigned_members and member.email:
+                    # add them to the unassigned_members list
+                    data["unassigned_members"].append(member.email)
+
+            return JsonResponse(data, safe=False) 
+        else:
+            return JsonResponse({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+
+
+
+
